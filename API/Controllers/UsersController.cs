@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 [Authorize]
-public class UsersController(IUnitOfWork unitOfWork, IMapper mapper,
+public class UsersController(IUnitOfWork unitOfWork, IMapper mapper, 
     IPhotoService photoService) : BaseApiController
 {
     [HttpGet]
@@ -24,10 +24,12 @@ public class UsersController(IUnitOfWork unitOfWork, IMapper mapper,
         return Ok(users);
     }
 
-    [HttpGet("{username}")]
+    [HttpGet("{username}")]  // /api/users/2
     public async Task<ActionResult<MemberDto>> GetUser(string username)
     {
-        var user = await unitOfWork.UserRepository.GetMemberAsync(username);
+        var currentUsername = User.GetUsername();
+        var user = await unitOfWork.UserRepository.GetMemberAsync(username, 
+            isCurrentUser: currentUsername == username);
 
         if (user == null) return NotFound();
 
@@ -35,12 +37,11 @@ public class UsersController(IUnitOfWork unitOfWork, IMapper mapper,
     }
 
     [HttpPut]
-    public async Task<ActionResult>  UpdateUser(MemberUpdateDto memberUpdateDto)
+    public async Task<ActionResult> UpdateUser(MemberUpdateDto memberUpdateDto)
     {
-
         var user = await unitOfWork.UserRepository.GetUserByUsernameAsync(User.GetUsername());
 
-        if(user == null) return BadRequest("Could not find user");
+        if (user == null) return BadRequest("Could not find user");
 
         mapper.Map(memberUpdateDto, user);
 
@@ -54,10 +55,10 @@ public class UsersController(IUnitOfWork unitOfWork, IMapper mapper,
     {
         var user = await unitOfWork.UserRepository.GetUserByUsernameAsync(User.GetUsername());
 
-        if(user == null) return BadRequest("Cannot update user");
+        if (user == null) return BadRequest("Cannot update user");
 
         var result = await photoService.AddPhotoAsync(file);
-
+        
         if (result.Error != null) return BadRequest(result.Error.Message);
 
         var photo = new Photo
@@ -66,12 +67,10 @@ public class UsersController(IUnitOfWork unitOfWork, IMapper mapper,
             PublicId = result.PublicId
         };
 
-        if (user.Photos.Count == 0) photo.IsMain = true;
-
         user.Photos.Add(photo);
 
-        if (await unitOfWork.Complete())
-            return CreatedAtAction(nameof(GetUser),
+        if (await unitOfWork.Complete()) 
+            return CreatedAtAction(nameof(GetUser), 
                 new {username = user.UserName}, mapper.Map<PhotoDto>(photo));
 
         return BadRequest("Problem adding photo");
@@ -80,7 +79,7 @@ public class UsersController(IUnitOfWork unitOfWork, IMapper mapper,
     [HttpPut("set-main-photo/{photoId:int}")]
     public async Task<ActionResult> SetMainPhoto(int photoId)
     {
-         var user = await unitOfWork.UserRepository.GetUserByUsernameAsync(User.GetUsername());
+        var user = await unitOfWork.UserRepository.GetUserByUsernameAsync(User.GetUsername());
 
         if (user == null) return BadRequest("Could not find user");
 
@@ -89,7 +88,6 @@ public class UsersController(IUnitOfWork unitOfWork, IMapper mapper,
         if (photo == null || photo.IsMain) return BadRequest("Cannot use this as main photo");
 
         var currentMain = user.Photos.FirstOrDefault(x => x.IsMain);
-
         if (currentMain != null) currentMain.IsMain = false;
         photo.IsMain = true;
 
@@ -105,11 +103,12 @@ public class UsersController(IUnitOfWork unitOfWork, IMapper mapper,
 
         if (user == null) return BadRequest("User not found");
 
-        var photo = user.Photos.FirstOrDefault(x => x.Id == photoId);
+        var photo = await unitOfWork.PhotoRepository.GetPhotoById(photoId);
 
         if (photo == null || photo.IsMain) return BadRequest("This photo cannot be deleted");
 
-        if (photo.PublicId != null) {
+        if (photo.PublicId != null)
+        {
             var result = await photoService.DeletePhotoAsync(photo.PublicId);
             if (result.Error != null) return BadRequest(result.Error.Message);
         }
@@ -120,5 +119,4 @@ public class UsersController(IUnitOfWork unitOfWork, IMapper mapper,
 
         return BadRequest("Problem deleting photo");
     }
-
 }

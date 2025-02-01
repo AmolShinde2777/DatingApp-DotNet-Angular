@@ -49,7 +49,7 @@ export class AccountService {
     localStorage.setItem('user', JSON.stringify(user));
     this.currentUser.set(user);
     this.likeService.getLikeIds();
-    this.presenceService.createHubConnection(user);
+    this.presenceService.createHubConnection(user)
   }
 
   logout() {
